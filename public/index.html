@@ -49,7 +49,7 @@ const ago = ms => ms < 60000 ? Math.round(ms / 1000) + ' detik' : Math.round(ms 
 async function tick() {
   try {
     const r = await fetch('/api/latest', { cache: 'no-store' });
-    if (!r.ok) throw new Error(r.status);
+    if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error('HTTP ' + r.status + (j.error ? ' - ' + j.error : '') + (j.hasUrl === false ? ' (env URL kosong)' : '') + (j.hasToken === false ? ' (env token kosong)' : '')); }
     const { readings, serverTime } = await r.json();
     if (!readings.length) {
       $('status').textContent = 'Belum ada data. Jalankan simulasi ESP32 di Velxio.';
@@ -68,7 +68,7 @@ async function tick() {
     $('rows').innerHTML = readings.slice(0, 8).map(x =>
       `<tr><td>${new Date(x.ts).toLocaleTimeString('id-ID')}</td><td>${x.temperature.toFixed(1)} °C</td><td>${x.humidity.toFixed(0)} %</td></tr>`).join('');
   } catch (e) {
-    $('status').innerHTML = '<span class="warn">Gagal memuat data. Periksa /api/latest dan koneksi Redis.</span>';
+    $('status').innerHTML = '<span class="warn">Gagal memuat data: ' + String(e.message).replace(/</g, '&lt;') + '</span>';
   }
 }
 tick();
