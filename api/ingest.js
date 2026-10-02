@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const redis = require('../lib/redis');
+const getRedis = require('../lib/redis');
 
 const safeEqual = (a, b) => {
   const x = Buffer.from(String(a || ''));
@@ -30,15 +30,22 @@ module.exports = async (req, res) => {
     /^[\w-]+$/.test(device);
   if (!valid) return res.status(400).json({ ok: false, error: 'payload tidak valid' });
 
-  // Batas kasar: 60 request/menit untuk seluruh endpoint
-  const bucket = `rl:${Math.floor(Date.now() / 60000)}`;
-  const n = await redis.incr(bucket);
-  if (n === 1) await redis.expire(bucket, 90);
-  if (n > 60) return res.status(429).json({ ok: false, error: 'terlalu sering' });
+  try {
+    const redis = getRedis();
+    // Batas kasar: 60 request/menit untuk seluruh endpoint
+    const bucket = `rl:${Math.floor(Date.now() / 60000)}`;
+    const n = await redis.incr(bucket);
+    if (n === 1) await redis.expire(bucket, 90);
+    if (n > 60) return res.status(429).json({ ok: false, error: 'terlalu sering' });
 
-  // Timestamp dari server, bukan dari jam emulator
-  await redis.lpush('readings', { device, temperature: t, humidity: h, ts: Date.now() });
-  await redis.ltrim('readings', 0, 199);
+    // Timestamp dari server, bukan dari jam emulator
+    await redis.lpush('readings', { device, temperature: t, humidity: h, ts: Date.now() });
+    await redis.ltrim('readings', 0, 199);
+
+  } catch (e) {
+    console.error('ingest error:', e);
+    return res.status(500).json({ ok: false, error: String(e.message || e).slice(0, 200) });
+  }
 
   return res.status(200).json({ ok: true });
 };

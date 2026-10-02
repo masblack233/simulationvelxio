@@ -1,0 +1,29 @@
+{
+  "format": "velxio-project",
+  "version": 1,
+  "exportedAt": "2026-10-02T05:48:38.806531Z",
+  "name": "esp32-vercel-dashboard",
+  "boards": [
+    {
+      "id": "esp32",
+      "name": "ESP32 Vercel",
+      "boardKind": "esp32",
+      "x": 100,
+      "y": 100,
+      "activeFileGroupId": "group-esp32",
+      "languageMode": "arduino",
+      "serialBaudRate": 115200
+    }
+  ],
+  "fileGroups": {
+    "group-esp32": [
+      {
+        "name": "sketch.ino",
+        "content": "// ESP32 -> Vercel (HTTPS POST). Dijalankan di Velxio (ESP32 DevKit V1).\n#include <WiFi.h>\n#include <WiFiClientSecure.h>\n#include <HTTPClient.h>\n\n// 1 = data palsu (uji jaringan dulu). 0 = baca DHT22 sungguhan.\n#define USE_FAKE_SENSOR 1\n\n#if !USE_FAKE_SENSOR\n  #include <DHT.h>\n  #define DHT_PIN 4\n  DHT dht(DHT_PIN, DHT22);\n#endif\n\n// === GANTI ===\nconst char* URL     = \"https://GANTI-PROJECT.vercel.app/api/ingest\";\nconst char* API_KEY = \"GANTI-DENGAN-KEY-UJI\";   // jangan pakai key produksi di proyek Velxio yang dipublikasikan\nconst char* DEVICE  = \"esp32-sim-1\";\n// =============\n\nvoid connectWiFi() {\n  WiFi.mode(WIFI_STA);\n  WiFi.begin(\"Velxio-GUEST\");   // SSID di sini ditulis ulang compiler Velxio; tidak berpengaruh\n  Serial.print(\"WiFi\");\n  while (WiFi.status() != WL_CONNECTED) { delay(250); Serial.print(\".\"); }\n  Serial.printf(\"\\nIP: %s\\n\", WiFi.localIP().toString().c_str());\n}\n\nvoid setup() {\n  Serial.begin(115200);\n#if !USE_FAKE_SENSOR\n  dht.begin();\n#endif\n  connectWiFi();\n}\n\nvoid loop() {\n  if (WiFi.status() != WL_CONNECTED) connectWiFi();\n\n#if USE_FAKE_SENSOR\n  float t = 27.0 + 3.0 * sin(millis() / 20000.0);\n  float h = 60.0 + 10.0 * cos(millis() / 30000.0);\n#else\n  float t = dht.readTemperature();\n  float h = dht.readHumidity();\n  if (isnan(t) || isnan(h)) { Serial.println(\"Sensor gagal dibaca\"); delay(2000); return; }\n#endif\n\n  char body[128];\n  snprintf(body, sizeof(body),\n           \"{\\\"device\\\":\\\"%s\\\",\\\"temperature\\\":%.1f,\\\"humidity\\\":%.1f}\", DEVICE, t, h);\n\n  WiFiClientSecure client;\n  client.setInsecure();          // HANYA untuk simulasi: sertifikat tidak divalidasi\n  HTTPClient http;\n  http.setTimeout(20000);        // handshake TLS di emulator lambat\n  if (http.begin(client, URL)) {\n    http.addHeader(\"Content-Type\", \"application/json\");\n    http.addHeader(\"x-api-key\", API_KEY);\n    int code = http.POST(body);\n    Serial.printf(\"POST %s -> %d\\n\", body, code);\n    if (code < 0) Serial.println(http.errorToString(code));\n    http.end();\n  }\n  delay(10000);                  // jangan terlalu rapat\n}\n"
+      }
+    ]
+  },
+  "components": [],
+  "wires": [],
+  "activeBoardId": "esp32"
+}
