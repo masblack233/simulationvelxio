@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pantau suhu ESP32</title>
+<style>
+  :root{--bg:#eef2f4;--ink:#14222b;--mute:#5d6f7a;--line:#cfd9de;--t:#0f766e;--h:#4338ca;--ok:#15803d;--warn:#b45309}
+  @media (prefers-color-scheme:dark){:root{--bg:#10191f;--ink:#e6eef2;--mute:#8da0ab;--line:#26343d;--t:#2dd4bf;--h:#a5b4fc;--ok:#4ade80;--warn:#fbbf24}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Avenir Next","Segoe UI",system-ui,sans-serif}
+  main{max-width:720px;margin:0 auto;padding:28px 20px 48px}
+  h1{font-size:1rem;font-weight:600;margin:0;color:var(--mute)}
+  #status{font-size:.9rem;margin:4px 0 24px}
+  .ok{color:var(--ok)}.warn{color:var(--warn)}
+  .big{display:flex;gap:40px;flex-wrap:wrap;margin-bottom:28px}
+  .big div span{display:block;font-size:.9rem;color:var(--mute)}
+  .big strong{font-size:clamp(3rem,14vw,5.5rem);font-weight:300;line-height:1;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+  #temp{color:var(--t)}#hum{color:var(--h)}
+  svg{width:100%;height:auto;display:block;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .legend{font-size:.85rem;color:var(--mute);margin:8px 0 28px}
+  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:.95rem}
+  th,td{text-align:left;padding:8px 0;border-bottom:1px solid var(--line)}
+  th{color:var(--mute);font-weight:500}
+</style>
+</head>
+<body>
+<main>
+  <h1>Pantau suhu ESP32</h1>
+  <p id="status">Memuat…</p>
+  <div class="big">
+    <div><span>Suhu</span><strong id="temp">–</strong></div>
+    <div><span>Kelembapan</span><strong id="hum">–</strong></div>
+  </div>
+  <svg id="chart" viewBox="0 0 600 160" role="img" aria-label="Grafik suhu dan kelembapan"></svg>
+  <p class="legend"><span style="color:var(--t)">━ Suhu</span> &nbsp; <span style="color:var(--h)">━ Kelembapan</span> (skala masing-masing, 60 data terakhir)</p>
+  <table><thead><tr><th>Waktu</th><th>Suhu</th><th>Kelembapan</th></tr></thead><tbody id="rows"></tbody></table>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const line = (vals, color) => {
+  const min = Math.min(...vals), max = Math.max(...vals), span = (max - min) || 1;
+  const pts = vals.map((v, i) =>
+    `${(i / (vals.length - 1)) * 600},${150 - ((v - min) / span) * 140}`).join(' ');
+  return `<polyline fill="none" stroke="${color}" stroke-width="2" points="${pts}"/>`;
+};
+const ago = ms => ms < 60000 ? Math.round(ms / 1000) + ' detik' : Math.round(ms / 60000) + ' menit';
+
+async function tick() {
+  try {
+    const r = await fetch('/api/latest', { cache: 'no-store' });
+    if (!r.ok) throw new Error(r.status);
+    const { readings, serverTime } = await r.json();
+    if (!readings.length) {
+      $('status').textContent = 'Belum ada data. Jalankan simulasi ESP32 di Velxio.';
+      return;
+    }
+    const last = readings[0], age = serverTime - last.ts;
+    $('temp').textContent = last.temperature.toFixed(1) + '°';
+    $('hum').textContent = last.humidity.toFixed(0) + '%';
+    $('status').innerHTML = age < 30000
+      ? `<span class="ok">Online</span> · ${last.device}`
+      : `<span class="warn">Terakhir terlihat ${ago(age)} lalu</span> · ${last.device}`;
+    const series = readings.slice().reverse();
+    $('chart').innerHTML = series.length > 1
+      ? line(series.map(x => x.temperature), 'var(--t)') + line(series.map(x => x.humidity), 'var(--h)')
+      : '';
+    $('rows').innerHTML = readings.slice(0, 8).map(x =>
+      `<tr><td>${new Date(x.ts).toLocaleTimeString('id-ID')}</td><td>${x.temperature.toFixed(1)} °C</td><td>${x.humidity.toFixed(0)} %</td></tr>`).join('');
+  } catch (e) {
+    $('status').innerHTML = '<span class="warn">Gagal memuat data. Periksa /api/latest dan koneksi Redis.</span>';
+  }
+}
+tick();
+setInterval(tick, 3000);
+</script>
+</body>
+</html>
